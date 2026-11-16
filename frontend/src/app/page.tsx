@@ -137,7 +137,35 @@ export default function DocumentProcessorApp() {
   const [workerReady, setWorkerReady] = useState(false);
   const [viewMode, setViewMode] = useState<"form" | "json">("form");
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [numPages, setNumPages] = useState<number>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(550);
+
+  // ResizeObserver to size document preview with exact technical margins:
+  // 5 squares on each side (5 * 20px = 100px left & right = 200px total margin)
+  // 1 square top & bottom (20px)
+  useEffect(() => {
+    if (!previewContainerRef.current) return;
+    const updateSize = () => {
+      if (previewContainerRef.current) {
+        const horizontalMargin = 200; // 5 cuadraditos (100px) a cada lado
+        const width = previewContainerRef.current.clientWidth - horizontalMargin;
+        setContainerWidth(Math.max(260, width));
+      }
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(previewContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Reset page when active document changes
+  useEffect(() => {
+    setCurrentPage(1);
+    setNumPages(1);
+  }, [activeItemId]);
 
   // Initialize PDF worker
   useEffect(() => {
@@ -365,13 +393,13 @@ export default function DocumentProcessorApp() {
       </header>
 
       {/* ====================================================================
-          MAIN 3-COLUMN LAYOUT: 30% | 30% | 40%
+          MAIN 3-COLUMN LAYOUT: 25% | 40% | 35%
           ==================================================================== */}
       <div className="flex-1 flex overflow-hidden w-full h-[calc(100vh-70px)]">
         {/* ------------------------------------------------------------------
-            COLUMNA 1: COLA DE DOCUMENTOS (30%)
+            COLUMNA 1: COLA DE DOCUMENTOS (25%)
             ------------------------------------------------------------------ */}
-        <section className="w-[30%] min-w-[280px] flex flex-col bg-white border-r border-industrial-200 relative overflow-hidden">
+        <section className="w-[25%] min-w-[240px] max-w-[25%] flex flex-col bg-white border-r border-industrial-200 relative overflow-hidden">
           {/* Header of Column 1 */}
           <div className="h-12 border-b border-industrial-200 px-4 flex items-center justify-between bg-industrial-50/70 shrink-0">
             <div className="flex items-center gap-2">
@@ -505,9 +533,9 @@ export default function DocumentProcessorApp() {
         </section>
 
         {/* ------------------------------------------------------------------
-            COLUMNA 2: PREVISUALIZACIÓN DEL DOCUMENTO (30%)
+            COLUMNA 2: PREVISUALIZACIÓN DEL DOCUMENTO (40%)
             ------------------------------------------------------------------ */}
-        <section className="w-[30%] min-w-[300px] flex flex-col bg-industrial-100 border-r border-industrial-200 relative overflow-hidden">
+        <section className="w-[40%] min-w-[340px] max-w-[40%] flex flex-col bg-industrial-100 border-r border-industrial-200 relative overflow-hidden">
           {/* Header of Column 2 */}
           <div className="h-12 border-b border-industrial-200 px-4 flex items-center justify-between bg-white shrink-0">
             <div className="flex items-center gap-2 overflow-hidden">
@@ -517,82 +545,134 @@ export default function DocumentProcessorApp() {
               </h2>
             </div>
 
-            {/* Zoom Controls */}
+            {/* Preview Controls: Zoom (- 100% +) | Ajustar | Pag 1/1 */}
             {activeItem && (
-              <div className="flex items-center gap-1 bg-industrial-100 border border-industrial-200 rounded px-1.5 py-0.5">
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
-                  className="text-concreto hover:text-concreto-dark p-0.5"
-                  title="Alejar"
-                >
-                  <span className="material-symbols-outlined text-xs">remove</span>
-                </button>
-                <span className="font-mono text-[10px] font-semibold text-concreto px-1">
-                  {zoomLevel}%
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setZoomLevel((z) => Math.min(180, z + 10))}
-                  className="text-concreto hover:text-concreto-dark p-0.5"
-                  title="Acercar"
-                >
-                  <span className="material-symbols-outlined text-xs">add</span>
-                </button>
+              <div className="flex items-center gap-2">
+                {/* 1. Zoom Controls con pasos de 10% y botones grises cuadrados */}
+                <div className="flex items-center bg-industrial-100 border border-industrial-200 rounded-md p-1 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel((z) => Math.max(40, z - 10))}
+                    className="size-6 rounded bg-industrial-200 hover:bg-industrial-300 text-concreto-dark flex items-center justify-center font-bold text-xs transition-colors"
+                    title="Reducir zoom (-10%)"
+                  >
+                    <span className="material-symbols-outlined text-sm font-bold">remove</span>
+                  </button>
+
+                  <span className="font-mono text-xs font-bold text-concreto-dark px-2 min-w-[46px] text-center select-none">
+                    {zoomLevel}%
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel((z) => Math.min(220, z + 10))}
+                    className="size-6 rounded bg-industrial-200 hover:bg-industrial-300 text-concreto-dark flex items-center justify-center font-bold text-xs transition-colors"
+                    title="Aumentar zoom (+10%)"
+                  >
+                    <span className="material-symbols-outlined text-sm font-bold">add</span>
+                  </button>
+                </div>
+
+                {/* 2. Botón Ajustar (con su contenedor, restablece al 100%) */}
+                <div className="bg-industrial-100 border border-industrial-200 rounded-md p-0.5 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(100)}
+                    className="px-2.5 py-1 rounded font-condensed text-xs font-bold uppercase tracking-wider text-concreto hover:text-concreto-dark hover:bg-white flex items-center gap-1.5 transition-colors"
+                    title="Restablecer a vista por defecto (100%)"
+                  >
+                    <span className="material-symbols-outlined text-sm">fit_screen</span>
+                    Ajustar
+                  </button>
+                </div>
+
+                {/* 3. Visualizador de Página (Pag 1/1) con su contenedor */}
+                <div className="bg-industrial-100 border border-industrial-200 rounded-md px-2 py-1 text-xs font-mono font-semibold text-concreto-dark flex items-center gap-1 shadow-2xs">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="size-5 rounded hover:bg-industrial-200 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    title="Página anterior"
+                  >
+                    <span className="material-symbols-outlined text-sm">chevron_left</span>
+                  </button>
+
+                  <span className="px-1 whitespace-nowrap">
+                    Pag {currentPage}/{numPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={currentPage >= numPages}
+                    onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
+                    className="size-5 rounded hover:bg-industrial-200 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                    title="Página siguiente"
+                  >
+                    <span className="material-symbols-outlined text-sm">chevron_right</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Preview viewport */}
-          <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-[#E5E8EB]/50">
+          {/* Preview viewport with 5x5 technical blueprint grid */}
+          <div
+            ref={previewContainerRef}
+            className="flex-1 overflow-auto bg-grid-technical flex p-5"
+          >
             {activeItem ? (
-              activeItem.file.type.startsWith("image/") ? (
-                <div
-                  className="relative transition-all duration-150 flex items-center justify-center"
-                  style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
-                >
-                  {imageUrl && (
-                    <img
-                      src={imageUrl}
-                      alt={activeItem.name}
-                      className="max-w-full max-h-[75vh] object-contain rounded shadow-lg border border-industrial-300 bg-white"
-                    />
-                  )}
-                </div>
-              ) : workerReady ? (
-                <div
-                  className="w-full flex justify-center items-start transition-all duration-150"
-                  style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
-                >
-                  <Document
-                    file={activeItem.file}
-                    className="shadow-xl rounded overflow-hidden border border-industrial-300"
-                    loading={
-                      <div className="font-condensed text-xs uppercase tracking-wider text-concreto-light p-6">
-                        Cargando PDF...
-                      </div>
-                    }
-                    error={
-                      <div className="font-condensed text-xs uppercase tracking-wider text-terracota p-6">
-                        Error al cargar el archivo PDF.
-                      </div>
-                    }
+              <div className="m-auto flex flex-col items-center justify-center min-w-fit">
+                {activeItem.file.type.startsWith("image/") ? (
+                  <div
+                    className="flex items-center justify-center transition-all duration-150"
+                    style={{ width: `${Math.round(containerWidth * (zoomLevel / 100))}px` }}
                   >
-                    <Page
-                      pageNumber={1}
-                      width={380}
-                      renderTextLayer={false}
-                      renderAnnotationLayer={false}
-                    />
-                  </Document>
-                </div>
-              ) : (
-                <div className="font-condensed text-xs uppercase tracking-wider text-concreto-light animate-pulse">
-                  Inicializando visor de PDF...
-                </div>
-              )
+                    {imageUrl && (
+                      <img
+                        src={imageUrl}
+                        alt={activeItem.name}
+                        className="w-full h-auto max-h-[85vh] object-contain rounded shadow-xl border border-industrial-300 bg-white"
+                      />
+                    )}
+                  </div>
+                ) : workerReady ? (
+                  <div
+                    className="flex justify-center transition-all duration-150"
+                  >
+                    <Document
+                      file={activeItem.file}
+                      onLoadSuccess={({ numPages }: { numPages: number }) => {
+                        setNumPages(numPages || 1);
+                      }}
+                      className="shadow-xl rounded overflow-hidden border border-industrial-300 bg-white"
+                      loading={
+                        <div className="font-condensed text-xs uppercase tracking-wider text-concreto-light p-6">
+                          Cargando PDF...
+                        </div>
+                      }
+                      error={
+                        <div className="font-condensed text-xs uppercase tracking-wider text-terracota p-6">
+                          Error al cargar el archivo PDF.
+                        </div>
+                      }
+                    >
+                      <Page
+                        pageNumber={currentPage}
+                        width={Math.round(containerWidth * (zoomLevel / 100))}
+                        renderTextLayer={false}
+                        renderAnnotationLayer={false}
+                      />
+                    </Document>
+                  </div>
+                ) : (
+                  <div className="font-condensed text-xs uppercase tracking-wider text-concreto-light animate-pulse">
+                    Inicializando visor de PDF...
+                  </div>
+                )}
+              </div>
             ) : (
-              <div className="text-center p-6 text-industrial-400">
+              <div className="text-center p-6 text-industrial-400 bg-white/70 backdrop-blur-xs rounded-xl border border-industrial-200/80 shadow-xs m-auto">
                 <span className="material-symbols-outlined text-4xl mb-2 text-industrial-300">
                   find_in_page
                 </span>
@@ -608,9 +688,9 @@ export default function DocumentProcessorApp() {
         </section>
 
         {/* ------------------------------------------------------------------
-            COLUMNA 3: RESULTADOS DE LA EXTRACCIÓN (40%)
+            COLUMNA 3: RESULTADOS DE LA EXTRACCIÓN (35%)
             ------------------------------------------------------------------ */}
-        <section className="w-[40%] flex flex-col bg-white overflow-hidden">
+        <section className="w-[35%] min-w-[300px] max-w-[35%] flex flex-col bg-white overflow-hidden">
           {/* Header of Column 3 */}
           <div className="h-12 border-b border-industrial-200 px-5 flex items-center justify-between bg-industrial-50/70 shrink-0">
             <div className="flex items-center gap-2">

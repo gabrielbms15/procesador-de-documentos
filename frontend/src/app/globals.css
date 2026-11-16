@@ -35,3 +35,14 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #9aa1a9;
 }
+
+/* Grilla técnica industrial 5x5 cuadritos (estilo papel milimetrado / mesa de corte) */
+.bg-grid-technical {
+  background-color: #eaedef;
+  background-image:
+    linear-gradient(to right, rgba(70, 75, 79, 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(70, 75, 79, 0.14) 1px, transparent 1px),
+    linear-gradient(to right, rgba(70, 75, 79, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(70, 75, 79, 0.04) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
