@@ -2,6 +2,8 @@ import logging
 import traceback
 import os 
 import json 
+import base64
+import fitz  # PyMuPDF
 import pdfplumber
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -12,7 +14,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from models.state import PipelineState, DocumentInfo
 from nodes import document_ingestion_node, text_extraction_node, text_cleaning_node, intelligent_chunking_node, filtering_node, llm_processing_node
 from models.state import PipelineState as _PipelineState
-from utils.pdf_utils import ocr_full_text
 from models.prompts import build_dni_prompts
 
 
@@ -110,18 +111,46 @@ class IdentityDocumentPipeline:
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
     async def process(self, file_path: str, filename: str) -> Dict[str, Any]:
-        # 1. OCR con PaddleOCR
-        data = ocr_full_text(file_path)
-        ocr_text_json = json.dumps(data, indent=4, ensure_ascii=False)
+        # 1. Convertir documento (imagen o PDF) a Base64 para OpenAI Vision
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".pdf":
+            with fitz.open(file_path) as doc:
+                page = doc[0]
+                pix = page.get_pixmap(dpi=150)
+                img_bytes = pix.tobytes("png")
+            mime_type = "image/png"
+        else:
+            with open(file_path, "rb") as f:
+                img_bytes = f.read()
+            mime_type = "image/jpeg" if ext in [".jpg", ".jpeg"] else "image/png"
+            
+        b64_image = base64.b64encode(img_bytes).decode("utf-8")
         
-        # 2. LLM Processing
-        system_prompt, user_prompt = build_dni_prompts(ocr_text_json)
+        # 2. LLM Vision Processing
+        system_prompt, _ = build_dni_prompts("")
+        user_text = (
+            "Analiza detalladamente la imagen de este Documento Nacional de Identidad (DNI) "
+            "y extrae todos los campos requeridos en el formato JSON especificado. "
+            "Sigue estrictamente las reglas de validación y normalización (mayúsculas, fechas YYYY-MM-DD y 8 dígitos de DNI)."
+        )
         
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': user_prompt}
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{b64_image}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
             ],
             temperature=0.0,
             response_format={"type": "json_object"}

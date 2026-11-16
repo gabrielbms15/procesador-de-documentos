@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """Configuración principal del sistema usando Pydantic V2."""
     
     # === API KEYS (REQUERIDAS) ===
-    openai_api_key: str = Field(..., description="OpenAI API key")
+    openai_api_key: str = Field(default="", description="OpenAI API key")
     
     # === CONFIGURACIÓN DE PROCESAMIENTO ===
     max_tokens_per_chunk: int = Field(default=2500, description="Máximo tokens por chunk")
@@ -60,9 +60,9 @@ class Settings(BaseSettings):
     @field_validator('openai_api_key', mode='before')
     @classmethod
     def validate_openai_key(cls, v: str) -> str:
-        if not v or not v.startswith("sk-"):
+        if v and not v.startswith("sk-"):
             raise ValueError("OpenAI API key debe comenzar con 'sk-'")
-        return v
+        return v or ""
 
     @field_validator('temp_dir', mode='before')
     @classmethod

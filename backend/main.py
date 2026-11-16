@@ -216,6 +216,26 @@ async def extract_identity(file: UploadFile = File(...)):
         if file_location.exists():
             os.remove(file_location)
 
+@app.post("/extract/license")
+async def extract_license(file: UploadFile = File(...)):
+    """Endpoint para licencias (preparado para integración de modelo)."""
+    return {
+        "tipo_documento": "Licencia",
+        "nombre_archivo": file.filename,
+        "estado": "Documento recibido",
+        "nota": "Pipeline específico de licencias en preparación"
+    }
+
+@app.post("/extract/contract")
+async def extract_contract(file: UploadFile = File(...)):
+    """Endpoint para contratos (preparado para integración de modelo)."""
+    return {
+        "tipo_documento": "Contrato",
+        "nombre_archivo": file.filename,
+        "estado": "Documento recibido",
+        "nota": "Pipeline específico de contratos en preparación"
+    }
+
 if __name__ == "__main__":
     # En producción, usualmente el host es 0.0.0.0 para que Docker lo exponga
     uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -3,9 +3,9 @@ import re
 import json
 
 def extraer_factura_final(path):
-    doc = fitz.open(path)
-    texto_raw = doc[0].get_text("text")
-    lineas_raw = [line.strip() for line in texto_raw.splitlines() if line.strip()]
+    with fitz.open(path) as doc:
+        texto_raw = doc[0].get_text("text")
+        lineas_raw = [line.strip() for line in texto_raw.splitlines() if line.strip()]
     
     # --- 1. CONFIGURACIÓN ---
     RUC_AUSTRAL = "20470005727"

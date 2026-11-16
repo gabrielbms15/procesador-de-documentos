@@ -45,7 +45,10 @@ venv.bak/
 # FastAPI / Uvicorn temporary & upload folders
 uploads/
 temp/
+temp_uploads/
 exports/
+input/
+backend/input/
 *.xlsx
 *.csv
 

@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Tuple, Dict
-from paddleocr import PaddleOCR
 import logging
 
 # Configure logger
@@ -221,21 +220,8 @@ def extract_with_pypdf2(file_path: Path, MAX_PAGES) -> Tuple[str, Dict[int, str]
 
 
 def ocr_full_text(img_path):
-    ocr = PaddleOCR(
-        lang="en",
-        use_textline_orientation=True, 
-        use_doc_orientation_classify=True,
-        use_doc_unwarping=True
-    )
-    result = ocr.ocr(img_path) # Ejecutar OCR
-
-    if not result:
-        return {"texto_completo": "", "lineas": []}
-
-    data = result[0]
-    lines = data.get("rec_texts", [])
-    full_text = "\n".join(lines)
+    """Función de compatibilidad. Para OCR multimodal se usa OpenAI Vision."""
     return {
-        "texto_completo": full_text,
-        "lineas": lines
+        "texto_completo": "",
+        "lineas": []
     }
