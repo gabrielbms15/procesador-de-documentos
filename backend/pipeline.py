@@ -108,7 +108,9 @@ class InvoicePipeline:
 
 class IdentityDocumentPipeline:
     def __init__(self):
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        from models.settings import settings
+        api_key = os.getenv("OPENAI_API_KEY") or settings.openai_api_key
+        self.client = OpenAI(api_key=api_key)
         
     async def process(self, file_path: str, filename: str) -> Dict[str, Any]:
         # 1. Convertir documento (imagen o PDF) a Base64 para OpenAI Vision

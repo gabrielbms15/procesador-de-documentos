@@ -7,6 +7,23 @@ from typing import Dict
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Rutas absolutas a los posibles archivos .env (backend/.env o raíz/.env)
+CURRENT_FILE = Path(__file__).resolve()
+BACKEND_DIR = CURRENT_FILE.parent.parent
+ROOT_DIR = BACKEND_DIR.parent
+
+ENV_FILES = [
+    BACKEND_DIR / ".env",
+    ROOT_DIR / ".env",
+    Path(".env")
+]
+
+# Cargar de inmediato en os.environ con python-dotenv
+for env_path in ENV_FILES:
+    if env_path.is_file():
+        load_dotenv(dotenv_path=env_path, override=True)
 
 class Settings(BaseSettings):
     """Configuración principal del sistema usando Pydantic V2."""
@@ -47,9 +64,9 @@ class Settings(BaseSettings):
         description="Precios de modelos OpenAI para cálculo de costos"
     )
     
-    # Configuración del modelo
+    # Configuración del modelo (usando rutas absolutas resueltas)
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[str(p) for p in ENV_FILES if p.is_file()] or ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"

@@ -2,19 +2,20 @@ import uvicorn
 import shutil
 import os
 import traceback
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde backend/.env antes de importar pipelines
+BACKEND_DIR = Path(__file__).resolve().parent
+load_dotenv(dotenv_path=BACKEND_DIR / ".env", override=True)
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.responses import StreamingResponse
-from pathlib import Path
 from pipeline import InsurancePDFPipeline, InvoicePipeline, IdentityDocumentPipeline
-from dotenv import load_dotenv
 import pandas as pd
 import io
 from pydantic import BaseModel
 from typing import Dict, Optional, Any, List
-
-
-# Cargar variables de entorno
-load_dotenv()
 
 from fastapi.middleware.cors import CORSMiddleware
 

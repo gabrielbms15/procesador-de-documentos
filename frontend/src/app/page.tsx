@@ -30,20 +30,20 @@ export interface InvoiceData {
     direccion?: string;
   };
   detalles?:
-    | {
-        moneda?: string;
-        Cantidad?: string;
-        "Unidad Medida"?: string;
-        Descripción?: string;
-        "Valor Unitario"?: string;
-      }
-    | Array<{
-        moneda?: string;
-        Cantidad?: string;
-        "Unidad Medida"?: string;
-        Descripción?: string;
-        "Valor Unitario"?: string;
-      }>;
+  | {
+    moneda?: string;
+    Cantidad?: string;
+    "Unidad Medida"?: string;
+    Descripción?: string;
+    "Valor Unitario"?: string;
+  }
+  | Array<{
+    moneda?: string;
+    Cantidad?: string;
+    "Unidad Medida"?: string;
+    Descripción?: string;
+    "Valor Unitario"?: string;
+  }>;
 }
 
 export interface IdentityDocumentData {
@@ -116,6 +116,8 @@ export interface DocumentQueueItem {
   status: "idle" | "processing" | "completed" | "error";
   data: ExtractedData;
   errorMessage?: string;
+  processingTime?: string;
+  approved?: boolean;
 }
 
 const DOC_TYPES: { id: SchemaType; label: string }[] = [
@@ -139,6 +141,7 @@ export default function DocumentProcessorApp() {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [numPages, setNumPages] = useState<number>(1);
+  const [queueFilter, setQueueFilter] = useState<"all" | "pending" | "approved">("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(550);
@@ -186,13 +189,39 @@ export default function DocumentProcessorApp() {
   }, [queue, activeItemId]);
 
   const formatDateTime = (date: Date): string => {
-    return date.toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
+    const now = new Date();
+    const isToday =
+      date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+
+    const timeStr = date.toLocaleTimeString("es-ES", {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: true,
     });
+
+    if (isToday) {
+      return `Hoy, ${timeStr}`;
+    }
+    return `${date.toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}, ${timeStr}`;
+  };
+
+  const getDocTypeLabel = (type: SchemaType): string => {
+    switch (type) {
+      case "insurance":
+        return "Póliza de seguro";
+      case "invoice":
+        return "Factura";
+      case "identity":
+        return "DNI / Documento de Identidad";
+      case "license":
+        return "Licencia de conducir";
+      case "contract":
+        return "Contrato";
+      default:
+        return "Documento";
+    }
   };
 
   const getDocTypeBadge = (type: SchemaType) => {
@@ -234,6 +263,7 @@ export default function DocumentProcessorApp() {
 
     // Send each file to extraction API
     for (const item of newItems) {
+      const startTime = performance.now();
       try {
         const formData = new FormData();
         formData.append("file", item.file);
@@ -249,28 +279,31 @@ export default function DocumentProcessorApp() {
           body: formData,
         });
 
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(1) + "s";
+
         if (response.ok) {
           const extractedData = await response.json();
           setQueue((prev) =>
             prev.map((q) =>
-              q.id === item.id ? { ...q, status: "completed", data: extractedData } : q
+              q.id === item.id ? { ...q, status: "completed", data: extractedData, processingTime: elapsed } : q
             )
           );
         } else {
           setQueue((prev) =>
             prev.map((q) =>
               q.id === item.id
-                ? { ...q, status: "error", errorMessage: `Error ${response.status}: ${response.statusText}` }
+                ? { ...q, status: "error", errorMessage: `Error ${response.status}: ${response.statusText}`, processingTime: elapsed }
                 : q
             )
           );
         }
       } catch (err: any) {
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(1) + "s";
         console.error("API error:", err);
         setQueue((prev) =>
           prev.map((q) =>
             q.id === item.id
-              ? { ...q, status: "error", errorMessage: err.message || "Error de conexión" }
+              ? { ...q, status: "error", errorMessage: err.message || "Error de conexión", processingTime: elapsed }
               : q
           )
         );
@@ -342,17 +375,17 @@ export default function DocumentProcessorApp() {
       {/* ====================================================================
           HEADER INDUSTRIAL BETONDECKEN
           ==================================================================== */}
-      <header className="h-[70px] bg-white border-b border-industrial-200 px-6 flex items-center justify-between shrink-0 shadow-sm z-30">
+      <header className="h-[80px] bg-white border-b border-industrial-200 px-6 py-1 flex items-center shrink-0 shadow-sm z-30 relative">
         {/* Left: Logo & Dual-row titles */}
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-5 shrink-0">
           <div className="flex items-center">
             <Image
               src="/BETONDECKEN-logo-SEO.png"
               alt="BETONDECKEN"
-              width={180}
-              height={44}
+              width={240}
+              height={80}
               priority
-              className="h-10 w-auto object-contain"
+              className="h-[74px] w-auto object-contain"
             />
           </div>
 
@@ -368,49 +401,109 @@ export default function DocumentProcessorApp() {
           </div>
         </div>
 
-        {/* Right: Rectangular light-gray component with document types */}
-        <div className="bg-industrial-100 border border-industrial-200 rounded-lg p-1 flex items-center gap-1 shadow-inner">
-          {DOC_TYPES.map((type, index) => {
-            const isSelected = selectedCategory === type.id;
-            return (
-              <React.Fragment key={type.id}>
-                {index > 0 && <span className="text-industrial-300 font-light select-none">|</span>}
+        {/* Center: Document type selector — centered over the previewer column (starts at 25%, width 40%) */}
+        <div className="absolute left-[25%] w-[40%] flex justify-center px-3">
+          <div
+            className="rounded-xl border border-industrial-200 p-2 flex items-center gap-2 shadow-sm w-full"
+            style={{ backgroundColor: "#F4F5F6" }}
+          >
+            {DOC_TYPES.map((type, index) => {
+              const isSelected = selectedCategory === type.id;
+              return (
                 <button
+                  key={type.id}
                   type="button"
                   onClick={() => setSelectedCategory(type.id)}
-                  className={`px-3 py-1.5 rounded-md font-condensed text-xs font-bold uppercase tracking-wider transition-all duration-150 ${
-                    isSelected
-                      ? "bg-white text-naranja border border-industrial-200 shadow-sm"
-                      : "text-concreto hover:text-concreto-dark hover:bg-industrial-200/60"
-                  }`}
+                  className={`flex items-center gap-2 flex-1 px-3 py-2 rounded-lg transition-all duration-150 ${isSelected
+                    ? "shadow-sm"
+                    : "bg-white hover:bg-industrial-100"
+                    }`}
+                  style={isSelected ? { backgroundColor: "#9E473E" } : undefined}
                 >
-                  {type.label}
+                  {/* Number badge */}
+                  <span
+                    className={`size-[18px] rounded-full flex items-center justify-center shrink-0 ${isSelected ? "bg-white" : "bg-concreto"
+                      }`}
+                  >
+                    <span
+                      className={`text-[9px] font-bold leading-none font-sans ${isSelected ? "text-concreto-dark" : "text-white"
+                        }`}
+                    >
+                      {index + 1}
+                    </span>
+                  </span>
+                  {/* Label */}
+                  <span
+                    className={`font-sans text-[10px] font-medium capitalize truncate ${isSelected ? "text-white" : "text-concreto-dark"
+                      }`}
+                  >
+                    {type.label}
+                  </span>
                 </button>
-              </React.Fragment>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </header>
 
       {/* ====================================================================
           MAIN 3-COLUMN LAYOUT: 25% | 40% | 35%
           ==================================================================== */}
-      <div className="flex-1 flex overflow-hidden w-full h-[calc(100vh-70px)]">
+      <div className="flex-1 flex overflow-hidden w-full h-[calc(100vh-80px)]">
         {/* ------------------------------------------------------------------
             COLUMNA 1: COLA DE DOCUMENTOS (25%)
             ------------------------------------------------------------------ */}
         <section className="w-[25%] min-w-[240px] max-w-[25%] flex flex-col bg-white border-r border-industrial-200 relative overflow-hidden">
           {/* Header of Column 1 */}
-          <div className="h-12 border-b border-industrial-200 px-4 flex items-center justify-between bg-industrial-50/70 shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-lg text-concreto">format_list_bulleted</span>
-              <h2 className="font-condensed font-bold text-sm tracking-wider uppercase text-concreto-dark">
-                Cola de documentos
-              </h2>
+          <div className="border-b border-industrial-200 px-4 pt-3 pb-2 bg-industrial-50/70 shrink-0 space-y-2">
+            {/* Row 1: Accent bar + title + counter */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                {/* Accent rectangle */}
+                <div
+                  className="w-[5px] h-7 rounded-sm shrink-0"
+                  style={{ backgroundColor: "#953C33" }}
+                />
+                <h2 className="font-condensed font-bold text-[18px] tracking-wider uppercase text-concreto-dark">
+                  Cola de documentos
+                </h2>
+              </div>
+              <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-industrial-200 text-concreto shrink-0">
+                {queueFilter === "all"
+                  ? queue.length
+                  : queueFilter === "pending"
+                    ? queue.filter((i) => i.status === "idle" || i.status === "processing").length
+                    : queue.filter((i) => i.status === "completed").length}
+              </span>
             </div>
-            <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-industrial-200 text-concreto">
-              {queue.length}
-            </span>
+
+            {/* Row 2: Filter tabs */}
+            <div
+              className="flex items-center gap-1 rounded-lg p-1"
+              style={{ backgroundColor: "#F4F5F6" }}
+            >
+              {(
+                [
+                  { id: "all", label: "Todos" },
+                  { id: "pending", label: "Por validar" },
+                  { id: "approved", label: "Aprobados" },
+                ] as const
+              ).map((f) => {
+                const isActive = queueFilter === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setQueueFilter(f.id)}
+                    className={`flex-1 py-1 rounded-md font-sans text-[10px] font-medium capitalize transition-all duration-150 ${isActive ? "text-white shadow-sm" : "text-concreto-dark hover:bg-industrial-200/50"
+                      }`}
+                    style={isActive ? { backgroundColor: "#9E473E" } : undefined}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Scrollable list of processed documents */}
@@ -427,79 +520,118 @@ export default function DocumentProcessorApp() {
                   Sube documentos abajo para procesarlos automáticamente.
                 </p>
               </div>
-            ) : (
-              queue.map((item) => {
+            ) : (() => {
+              const filteredQueue = queue.filter((item) => {
+                if (queueFilter === "pending") return item.status === "idle" || item.status === "processing" || item.status === "error";
+                if (queueFilter === "approved") return item.status === "completed";
+                return true;
+              });
+              return filteredQueue.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-6">
+                  <span className="material-symbols-outlined text-4xl mb-2 text-industrial-300">filter_list</span>
+                  <p className="font-condensed text-sm font-semibold uppercase tracking-wider text-concreto">Sin resultados</p>
+                  <p className="text-xs text-concreto-light mt-1">No hay documentos en este estado.</p>
+                </div>
+              ) : filteredQueue.map((item) => {
                 const isActive = (activeItem?.id === item.id);
-                const badge = getDocTypeBadge(item.docType);
+                const fileExt = item.name.includes(".")
+                  ? item.name.split(".").pop()?.toUpperCase() || "DOC"
+                  : "DOC";
+                const docTypeLabel = getDocTypeLabel(item.docType);
 
                 return (
                   <div
                     key={item.id}
                     onClick={() => setActiveItemId(item.id)}
-                    className={`group relative p-3 rounded-lg border transition-all cursor-pointer ${
+                    className={`group relative p-3 rounded-xl border transition-all cursor-pointer bg-white ${
                       isActive
-                        ? "bg-industrial-50 border-naranja shadow-sm ring-1 ring-naranja/20"
-                        : "bg-white border-industrial-200 hover:border-concreto-light hover:bg-industrial-50/50"
+                        ? "border-[#953C33] shadow-sm ring-1 ring-[#953C33]/20"
+                        : "border-industrial-200 hover:border-concreto-light hover:shadow-xs"
                     }`}
                   >
                     {/* Active Accent Bar */}
                     {isActive && (
-                      <div className="absolute left-0 top-2 bottom-2 w-1 bg-naranja rounded-r"></div>
+                      <div className="absolute left-0 top-3 bottom-3 w-1.5 bg-[#953C33] rounded-r"></div>
                     )}
 
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-sans text-xs font-bold text-concreto-dark truncate">
-                          {item.name}
-                        </p>
-
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span
-                            className={`font-condensed text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badge.bg}`}
-                          >
-                            {badge.text}
+                    {/* Row 1: Extension + File name & doc type + processing time */}
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        {/* Extension badge */}
+                        <div className="shrink-0 px-2 py-0.5 rounded-md border border-amber-300/80 bg-amber-50/50 flex items-center justify-center">
+                          <span className="font-mono text-[10px] font-bold text-amber-900 tracking-wider">
+                            {fileExt}
                           </span>
+                        </div>
 
-                          <span className="font-mono text-[10px] text-concreto-light flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[12px]">schedule</span>
-                            {item.timestamp}
-                          </span>
+                        {/* File Name & Document Type */}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-sans text-xs font-bold text-concreto-dark truncate leading-tight" title={item.name}>
+                            {item.name}
+                          </p>
+                          <p className="font-sans text-[11px] font-medium text-[#953C33] truncate mt-0.5 leading-tight">
+                            {docTypeLabel}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Status & Delete */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {item.status === "processing" && (
-                          <span className="font-mono text-[10px] text-naranja flex items-center gap-1 animate-pulse font-semibold">
-                            <span className="material-symbols-outlined text-xs animate-spin">sync</span>
-                            Extrayendo
-                          </span>
-                        )}
-                        {item.status === "completed" && (
-                          <span className="material-symbols-outlined text-base text-emerald-600" title="Procesado">
-                            check_circle
-                          </span>
-                        )}
-                        {item.status === "error" && (
-                          <span className="material-symbols-outlined text-base text-terracota" title={item.errorMessage || "Error"}>
-                            error
-                          </span>
-                        )}
+                      {/* Right: Processing Time Badge & Delete */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="px-2 py-0.5 rounded-md border border-amber-300/80 bg-amber-50/40 text-[11px] font-mono font-medium text-amber-800">
+                          {item.status === "processing" ? (
+                            <span className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] animate-spin">sync</span>
+                              ...
+                            </span>
+                          ) : (
+                            item.processingTime || "1.8s"
+                          )}
+                        </div>
 
                         <button
                           type="button"
                           onClick={(e) => removeItem(item.id, e)}
-                          className="opacity-0 group-hover:opacity-100 p-1 text-industrial-400 hover:text-terracota transition-opacity rounded"
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-industrial-400 hover:text-[#953C33] transition-opacity rounded"
                           title="Eliminar documento"
                         >
                           <span className="material-symbols-outlined text-sm">close</span>
                         </button>
                       </div>
                     </div>
+
+                    {/* Subtle divider */}
+                    <div className="w-full border-t border-industrial-100 my-2"></div>
+
+                    {/* Row 2: Status pill + Timestamp */}
+                    <div className="flex items-center justify-between gap-2">
+                      {item.status === "completed" ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-medium">
+                          <span className="size-1.5 rounded-full bg-emerald-600"></span>
+                          Aprobado
+                        </span>
+                      ) : item.status === "processing" ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium animate-pulse">
+                          <span className="size-1.5 rounded-full bg-amber-500"></span>
+                          Extrayendo
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium"
+                          title={item.status === "error" ? item.errorMessage : undefined}
+                        >
+                          <span className="size-1.5 rounded-full bg-amber-500"></span>
+                          Por Validar
+                        </span>
+                      )}
+
+                      <span className="font-sans text-[11px] text-concreto-light tracking-tight">
+                        {item.timestamp}
+                      </span>
+                    </div>
                   </div>
                 );
-              })
-            )}
+              });
+            })()}
           </div>
 
           {/* Fixed Upload Area at the bottom of Column 1 */}
@@ -706,22 +838,20 @@ export default function DocumentProcessorApp() {
                 <button
                   type="button"
                   onClick={() => setViewMode("form")}
-                  className={`px-2.5 py-1 rounded text-xs font-condensed font-bold uppercase tracking-wider transition-colors ${
-                    viewMode === "form"
-                      ? "bg-white text-concreto-dark shadow-xs"
-                      : "text-concreto hover:text-concreto-dark"
-                  }`}
+                  className={`px-2.5 py-1 rounded text-xs font-condensed font-bold uppercase tracking-wider transition-colors ${viewMode === "form"
+                    ? "bg-white text-concreto-dark shadow-xs"
+                    : "text-concreto hover:text-concreto-dark"
+                    }`}
                 >
                   Formulario
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("json")}
-                  className={`px-2.5 py-1 rounded text-xs font-condensed font-bold uppercase tracking-wider transition-colors ${
-                    viewMode === "json"
-                      ? "bg-white text-concreto-dark shadow-xs"
-                      : "text-concreto hover:text-concreto-dark"
-                  }`}
+                  className={`px-2.5 py-1 rounded text-xs font-condensed font-bold uppercase tracking-wider transition-colors ${viewMode === "json"
+                    ? "bg-white text-concreto-dark shadow-xs"
+                    : "text-concreto hover:text-concreto-dark"
+                    }`}
                 >
                   JSON
                 </button>
@@ -808,8 +938,8 @@ function renderStructuredFields(type: SchemaType, data: any) {
     const items = Array.isArray(invoice.detalles)
       ? invoice.detalles
       : invoice.detalles
-      ? [invoice.detalles]
-      : [];
+        ? [invoice.detalles]
+        : [];
     const currency = Array.isArray(invoice.detalles)
       ? invoice.detalles[0]?.moneda || "PEN"
       : invoice.detalles?.moneda || "PEN";

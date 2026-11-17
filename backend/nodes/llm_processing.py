@@ -22,8 +22,12 @@ def llm_processing_node(state: PipelineState) -> PipelineState:
     chunks_to_process = state.chunk_data.filtered_chunks
     if not chunks_to_process:
         return state.add_warning("No hay chunks para procesar con LLM")
+    api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return state.add_error("No se encontró la clave OPENAI_API_KEY en el archivo .env")
+
     try:
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = OpenAI(api_key=api_key)
     except Exception as e:
         return state.add_error(f"Error inicializando cliente OpenAI: {str(e)}")
 
